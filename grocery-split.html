@@ -436,7 +436,28 @@ async function submitEntry() {
   const payload = { buyer: state.extracted.buyer, date: state.date, store: state.store, items: state.items };
   const total = state.items.reduce((s, it) => s + parseFloat(it.price||0), 0);
   if (state.settings.scriptUrl) {
-    try { await fetch(state.settings.scriptUrl, { method:"POST", mode:"no-cors", headers:{"Content-Type":"application/json"}, body: JSON.stringify(payload) }); } catch {}
+    try {
+      // Send as text/plain: a "simple" content type that isn't stripped by no-cors
+      // and that Apps Script reads reliably regardless of payload size.
+      const res = await fetch(state.settings.scriptUrl, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify(payload),
+        redirect: "follow"
+      });
+      const result = await res.json();
+      if (!result.success) {
+        state.stage = "error";
+        state.debugInfo = "Sheet did not confirm the write: " + JSON.stringify(result);
+        render();
+        return;
+      }
+    } catch(err) {
+      state.stage = "error";
+      state.debugInfo = "Send failed: " + err.message;
+      render();
+      return;
+    }
   }
   state.lastEntry = { ...payload, total };
   state.stage = "done"; render();
